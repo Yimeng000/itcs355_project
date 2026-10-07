@@ -6,3 +6,4 @@ __pycache__/
 cloud.env
 *:Zone.Identifier
 models/*.joblib
+.venv-model/
