@@ -1,0 +1,27 @@
+{
+  "target": "Trip_Price",
+  "features": {
+    "Trip_Distance_km": "float64",
+    "Passenger_Count": "float64",
+    "Base_Fare": "float64",
+    "Per_Km_Rate": "float64",
+    "Per_Minute_Rate": "float64",
+    "Time_of_Day": "str",
+    "Day_of_Week": "str",
+    "Traffic_Conditions": "str",
+    "Weather": "str"
+  },
+  "numeric_features": [
+    "Trip_Distance_km",
+    "Passenger_Count",
+    "Base_Fare",
+    "Per_Km_Rate",
+    "Per_Minute_Rate"
+  ],
+  "categorical_features": [
+    "Time_of_Day",
+    "Day_of_Week",
+    "Traffic_Conditions",
+    "Weather"
+  ]
+}

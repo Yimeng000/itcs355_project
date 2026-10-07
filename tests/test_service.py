@@ -12,6 +12,9 @@ VALID_INPUT = {
     "Passenger_Count": 2,
     "Traffic_Conditions": "Medium",
     "Weather": "Clear",
+    "Base_Fare": 3.5,
+    "Per_Km_Rate": 1.2,
+    "Per_Minute_Rate": 0.3,
 }
 
 

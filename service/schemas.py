@@ -18,6 +18,9 @@ class PredictRequest(BaseModel):
     )
     Traffic_Conditions: Literal["Low", "Medium", "High"]
     Weather: Literal["Clear", "Rain", "Snow"]
+    Base_Fare: float = Field(ge=0, allow_inf_nan=False)
+    Per_Km_Rate: float = Field(gt=0, allow_inf_nan=False)
+    Per_Minute_Rate: float = Field(ge=0, allow_inf_nan=False)
 
 
 class PredictResponse(BaseModel):
