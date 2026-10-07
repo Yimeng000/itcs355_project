@@ -1,0 +1,10 @@
+.git
+.venv/
+.venv-model/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+cloud.env
+models/*.joblib
+**/*:Zone.Identifier
