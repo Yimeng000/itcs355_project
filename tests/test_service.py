@@ -56,7 +56,14 @@ class ExampleModel:
 
     def predict(self, frame):
         assert list(frame.columns) == self.feature_names_in_
-        assert frame.iloc[0].to_dict() == VALID_INPUT
+        expected = {
+            **VALID_INPUT,
+            "Time_of_Day": "morning",
+            "Day_of_Week": "weekday",
+            "Traffic_Conditions": "medium",
+            "Weather": "clear",
+        }
+        assert frame.iloc[0].to_dict() == expected
         return [34.234]
 
 

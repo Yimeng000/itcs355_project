@@ -65,7 +65,16 @@ def predict(payload: PredictRequest):
         )
 
     try:
-        frame = pd.DataFrame([payload.model_dump()])
+        row = payload.model_dump()
+        for field in (
+            "Time_of_Day",
+            "Day_of_Week",
+            "Traffic_Conditions",
+            "Weather",
+        ):
+            row[field] = row[field].lower()
+
+        frame = pd.DataFrame([row])
         frame = frame[list(model.feature_names_in_)]
         fare = float(model.predict(frame)[0])
 
