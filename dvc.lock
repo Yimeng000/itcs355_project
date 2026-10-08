@@ -79,8 +79,8 @@ stages:
       isexec: true
     - path: src/train.py
       hash: md5
-      md5: 1b7cc03995255e884096e062cd17c23b
-      size: 8631
+      md5: c3fd39f6710faed765905ee23d1a6473
+      size: 8804
       isexec: true
     params:
       params.yaml:
@@ -109,8 +109,8 @@ stages:
       size: 2786387
     - path: reports/train_metrics.json
       hash: md5
-      md5: d9766f550540316f693d2f90330bfa55
-      size: 552
+      md5: ce81237a477a8157d75091b6aea5d59d
+      size: 764
   evaluate:
     cmd: python -m src.evaluate
     deps:
@@ -138,8 +138,8 @@ stages:
       isexec: true
     - path: src/train.py
       hash: md5
-      md5: 1b7cc03995255e884096e062cd17c23b
-      size: 8631
+      md5: c3fd39f6710faed765905ee23d1a6473
+      size: 8804
       isexec: true
     params:
       params.yaml:
@@ -157,7 +157,7 @@ stages:
     outs:
     - path: reports/metrics.json
       hash: md5
-      md5: 4fd1fa4674e42c8ce4ae91cfe0f4352e
+      md5: a301557f39f84b12c448f54ec1158d66
       size: 1009
     - path: reports/predicted_vs_actual.png
       hash: md5
