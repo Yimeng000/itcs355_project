@@ -1,0 +1,42 @@
+seed: 42
+split:
+  seed: 42
+  val_size: 0.15
+  test_size: 0.15
+
+train:
+  seed: 42
+  baseline_type: "dummy_mean"   # Options: "dummy_mean", "linear_regression"
+  model_type: "random_forest"   # Options: "random_forest", "gradient_boosting"
+  with_scaler: true
+  baseline:
+    strategy: "mean"
+  random_forest:
+    n_estimators: 150
+    max_depth: 10
+    min_samples_split: 5
+    min_samples_leaf: 2
+  gradient_boosting:
+    n_estimators: 150
+    max_depth: 5
+    learning_rate: 0.1
+    min_samples_split: 5
+    min_samples_leaf: 2
+
+evaluate:
+  thresholds:
+    min_r2: 0.75
+    max_mae: 14.00
+    max_rmse: 22.00
+  latency:
+    n_samples: 100
+    max_p95_ms: 1000.0  # 1 second SLA
+  reports_dir: "reports"
+  metrics_file: "metrics.json"
+  plot_file: "predicted_vs_actual.png"
+
+paths:
+  train_csv: "data/processed/train.csv"
+  val_csv: "data/processed/val.csv"
+  test_csv: "data/processed/test.csv"
+  model_dir: "models"

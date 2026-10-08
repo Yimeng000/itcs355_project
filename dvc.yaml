@@ -1,0 +1,61 @@
+stages:
+  clean:
+    cmd: python src/clean.py
+    deps:
+      - data/taxi_trip_pricing.csv
+      - src/clean.py
+    outs:
+      - data/processed/clean.csv
+    metrics:
+      - data/processed/clean_report.json:
+          cache: false
+
+  split:
+    cmd: python src/split.py
+    deps:
+      - data/processed/clean.csv
+      - src/split.py
+    params:
+      - split
+    outs:
+      - data/processed/test.csv
+      - data/processed/train.csv
+      - data/processed/val.csv
+    metrics:
+      - data/processed/split_report.json:
+          cache: false
+
+  train:
+    cmd: python -m src.train --metrics-out reports/train_metrics.json
+    deps:
+      - data/processed/test.csv
+      - data/processed/train.csv
+      - data/processed/val.csv
+      - src/features.py
+      - src/train.py
+    params:
+      - train
+    outs:
+      - models/input_schema.json
+      - models/model.joblib
+    metrics:
+      - reports/train_metrics.json:
+          cache: false
+
+  evaluate:
+    cmd: python -m src.evaluate
+    deps:
+      - data/processed/test.csv
+      - data/processed/train.csv
+      - models/model.joblib
+      - src/evaluate.py
+      - src/features.py
+      - src/train.py
+    params:
+      - evaluate
+    metrics:
+      - reports/metrics.json:
+          cache: false
+    plots:
+      - reports/predicted_vs_actual.png:
+          cache: false

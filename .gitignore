@@ -7,3 +7,10 @@ cloud.env
 *:Zone.Identifier
 models/*.joblib
 .venv-model/
+models/handoff-backup/
+data/processed/
+reports/
+mlflow.db
+mlflow.db-*
+mlruns/
+mlartifacts/
