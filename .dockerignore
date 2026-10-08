@@ -8,3 +8,4 @@ __pycache__/
 cloud.env
 models/*.joblib
 **/*:Zone.Identifier
+gha-creds-*.json

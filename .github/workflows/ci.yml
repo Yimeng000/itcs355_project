@@ -1,4 +1,4 @@
-name: Project tests
+name: Project CI and CD
 
 on:
   push:
@@ -13,18 +13,148 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Download project code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install project tools
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Run tests
-        run: python -m pytest tests -v
+      - name: Check portability, credentials and tests
+        run: make check
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    concurrency:
+      group: taxi-production-deployment
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      CLOUD_PROVIDER: gcp
+      PROJECT_ID: itcs355-6688176
+      REGION: asia-southeast1
+      IMAGE_REPOSITORY: asia-southeast1-docker.pkg.dev/itcs355-6688176/itcs355/taxi-fare
+      WIF_PROVIDER: projects/259177885839/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+      DEPLOY_ACCOUNT: github-actions@itcs355-6688176.iam.gserviceaccount.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build serving image
+        run: |
+          docker build \
+            -f service/Dockerfile.serve \
+            -t "$IMAGE_REPOSITORY:$GITHUB_SHA" .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Push serving image
+        id: image
+        run: |
+          gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
+          docker push "$IMAGE_REPOSITORY:$GITHUB_SHA"
+          digest=$(gcloud artifacts docker images describe \
+            "$IMAGE_REPOSITORY:$GITHUB_SHA" \
+            --project="$PROJECT_ID" \
+            --format="value(image_summary.digest)")
+          test -n "$digest"
+          echo "uri=$IMAGE_REPOSITORY@$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy registered model service
+        id: deploy
+        env:
+          SERVING_IMAGE: ${{ steps.image.outputs.uri }}
+        run: |
+          python -m cloudlayer.deploy \
+            --service=taxi-fare-api \
+            --image="$SERVING_IMAGE"
+
+      - name: Get identity token for service checks
+        id: smoke_auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.deploy.outputs.url }}
+          id_token_include_email: true
+
+      - name: Verify cloud readiness, prediction and invalid input
+        env:
+          TAXI_URL: ${{ steps.deploy.outputs.url }}
+          TAXI_TOKEN: ${{ steps.smoke_auth.outputs.id_token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError
+
+          def call(path, payload=None):
+              headers = {
+                  "Authorization": "Bearer " + os.environ["TAXI_TOKEN"],
+                  "Content-Type": "application/json",
+              }
+              data = None if payload is None else json.dumps(payload).encode()
+              request = Request(os.environ["TAXI_URL"] + path,
+                                headers=headers, data=data)
+              try:
+                  with urlopen(request, timeout=60) as response:
+                      return response.status, json.loads(response.read())
+              except HTTPError as error:
+                  return error.code, json.loads(error.read())
+
+          receipt = json.load(open("reports/registration.json"))
+          version = str(receipt["version_id"])
+          status, ready = call("/ready")
+          assert status == 200, (status, ready)
+          assert ready["model_version"] == version, ready
+
+          payload = {
+              "Trip_Distance_km": 10.0, "Passenger_Count": 2,
+              "Base_Fare": 3.0, "Per_Km_Rate": 1.5,
+              "Per_Minute_Rate": 0.3, "Time_of_Day": "Morning",
+              "Day_of_Week": "Weekday", "Traffic_Conditions": "Low",
+              "Weather": "Clear",
+          }
+          status, prediction = call("/predict", payload)
+          assert status == 200, (status, prediction)
+          assert prediction["model_version"] == version, prediction
+          assert prediction["estimated_fare"] == 37.2, prediction
+
+          payload["Trip_Distance_km"] = -5
+          status, result = call("/predict", payload)
+          assert status == 422, (status, result)
+          print("Cloud readiness, prediction and invalid-input checks passed")
+          PY
+
+      - name: Save deployment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-${{ github.sha }}
+          path: reports/deployment.json
