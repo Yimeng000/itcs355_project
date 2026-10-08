@@ -1,0 +1,4 @@
+[core]
+    remote = gcs
+['remote "gcs"']
+    url = gs://itcs355-6688176/itcs355_project/dvc-cache
