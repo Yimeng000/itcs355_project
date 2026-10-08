@@ -6,6 +6,7 @@ COPY requirements-dev.txt .
 RUN python -m pip install --no-cache-dir -r requirements-dev.txt
 
 COPY service/ ./service/
+COPY cloudlayer/ ./cloudlayer/
 
 RUN useradd --create-home appuser
 USER appuser

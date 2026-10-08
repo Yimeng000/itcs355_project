@@ -19,15 +19,27 @@ async def lifespan(app: FastAPI):
     app.state.model = None
     app.state.model_version = os.getenv("MODEL_VERSION", "local")
 
-    path = Path(os.getenv("MODEL_PATH", "models/model.joblib"))
-    try:
-        app.state.model = joblib.load(path)
-        log.info("Model loaded from %s", path)
-    except Exception:
-        log.exception("Model could not be loaded from %s", path)
+    from tempfile import TemporaryDirectory
 
-    yield
-    app.state.model = None
+    with TemporaryDirectory(prefix="taxi-model-") as directory:
+        path = Path(os.getenv("MODEL_PATH", "models/model.joblib"))
+        try:
+            artifact_uri = os.getenv("MODEL_ARTIFACT_URI")
+            if artifact_uri:
+                from cloudlayer.artifacts import download_model
+
+                path = Path(directory) / "model.joblib"
+                download_model(artifact_uri, path)
+
+            app.state.model = joblib.load(path)
+            log.info("Model loaded, version=%s", app.state.model_version)
+        except Exception:
+            log.exception("Model could not be loaded")
+
+        try:
+            yield
+        finally:
+            app.state.model = None
 
 
 app = FastAPI(
