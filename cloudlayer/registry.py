@@ -41,6 +41,7 @@ def register_model(cfg, files, manifest, image, parent_model):
         serving_container_health_route="/ready",
         serving_container_predict_route="/predict",
         serving_container_environment_variables={
+            "GOOGLE_CLOUD_PROJECT": cfg.project_id,
             "MODEL_ARTIFACT_URI": f"{artifact_uri}/model.joblib",
             "MODEL_VERSION": manifest["model_sha256"][:16],
         },

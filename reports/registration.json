@@ -1,0 +1,20 @@
+{
+  "model_resource": "projects/259177885839/locations/asia-southeast1/models/4463872073235693568",
+  "version_id": "2",
+  "artifact_uri": "gs://itcs355-6688176/itcs355_project/models/444becdc54268009/4d94826e34ad4cdca59f9541798079da",
+  "serving_image": "asia-southeast1-docker.pkg.dev/itcs355-6688176/itcs355/taxi-fare@sha256:c4f74d7fb028ba285b73747da92a9283c6d736eb73114bc6438e6d9d9c10c2fc",
+  "lineage": {
+    "training_run_id": "4d94826e34ad4cdca59f9541798079da",
+    "training_git_commit": "b8d14dc0665a15fc59252309e9e6ce875df2211b",
+    "data_fingerprint": "f652ecb504509f7c",
+    "model_sha256": "444becdc54268009a0fb4abcda0c4fa6a0a07ab7f9674cdd518ddc3cfc7d48a7",
+    "model_type": "random_forest",
+    "seed": 42,
+    "test_metrics": {
+      "mae": 11.4973,
+      "rmse": 18.2893,
+      "r2": 0.8854
+    },
+    "quality_gate_passed": true
+  }
+}
