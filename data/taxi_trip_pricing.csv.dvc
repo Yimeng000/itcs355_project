@@ -1,0 +1,6 @@
+outs:
+- md5: ea9922043a10c6cffbda9e5ee5fe62f9
+  size: 67269
+  isexec: true
+  hash: md5
+  path: taxi_trip_pricing.csv

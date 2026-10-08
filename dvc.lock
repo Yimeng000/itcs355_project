@@ -1,0 +1,165 @@
+schema: '2.0'
+stages:
+  clean:
+    cmd: python src/clean.py
+    deps:
+    - path: data/taxi_trip_pricing.csv
+      hash: md5
+      md5: ea9922043a10c6cffbda9e5ee5fe62f9
+      size: 67269
+      isexec: true
+    - path: src/clean.py
+      hash: md5
+      md5: c335c201e67be6e65958a08b308c047f
+      size: 7161
+      isexec: true
+    outs:
+    - path: data/processed/clean.csv
+      hash: md5
+      md5: ad56ec9d2e2ecdc8cc84922f362d9ca6
+      size: 57455
+    - path: data/processed/clean_report.json
+      hash: md5
+      md5: 0ff770696b6981cad3ddf285026255b0
+      size: 523
+  split:
+    cmd: python src/split.py
+    deps:
+    - path: data/processed/clean.csv
+      hash: md5
+      md5: ad56ec9d2e2ecdc8cc84922f362d9ca6
+      size: 57455
+    - path: src/split.py
+      hash: md5
+      md5: 7aef5a533910df4418c0ffd14b344b7e
+      size: 6218
+      isexec: true
+    params:
+      params.yaml:
+        split:
+          seed: 42
+          val_size: 0.15
+          test_size: 0.15
+    outs:
+    - path: data/processed/split_report.json
+      hash: md5
+      md5: 9f7e340aebf1a9a0ad5480f303875e8a
+      size: 289
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 0dfdd059026d31dd726b106806e52344
+      size: 8874
+    - path: data/processed/train.csv
+      hash: md5
+      md5: 3ca98244a2f116a5bb93019f4e05a979
+      size: 40130
+    - path: data/processed/val.csv
+      hash: md5
+      md5: 628926e6b2884718f58b9983c7c3f1aa
+      size: 8715
+  train:
+    cmd: python -m src.train --metrics-out reports/train_metrics.json
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 0dfdd059026d31dd726b106806e52344
+      size: 8874
+    - path: data/processed/train.csv
+      hash: md5
+      md5: 3ca98244a2f116a5bb93019f4e05a979
+      size: 40130
+    - path: data/processed/val.csv
+      hash: md5
+      md5: 628926e6b2884718f58b9983c7c3f1aa
+      size: 8715
+    - path: src/features.py
+      hash: md5
+      md5: b9539468e64e11623ed246787cc229d0
+      size: 2583
+      isexec: true
+    - path: src/train.py
+      hash: md5
+      md5: 1b7cc03995255e884096e062cd17c23b
+      size: 8631
+      isexec: true
+    params:
+      params.yaml:
+        train:
+          seed: 42
+          baseline_type: dummy_mean
+          model_type: random_forest
+          with_scaler: true
+          baseline:
+            strategy: mean
+          random_forest:
+            n_estimators: 150
+            max_depth: 10
+            min_samples_split: 5
+            min_samples_leaf: 2
+          gradient_boosting:
+            n_estimators: 150
+            max_depth: 5
+            learning_rate: 0.1
+            min_samples_split: 5
+            min_samples_leaf: 2
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: a138b7c6eb4850b7facd87674c3e190e
+      size: 2786387
+    - path: reports/train_metrics.json
+      hash: md5
+      md5: d9766f550540316f693d2f90330bfa55
+      size: 552
+  evaluate:
+    cmd: python -m src.evaluate
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 0dfdd059026d31dd726b106806e52344
+      size: 8874
+    - path: data/processed/train.csv
+      hash: md5
+      md5: 3ca98244a2f116a5bb93019f4e05a979
+      size: 40130
+    - path: models/model.joblib
+      hash: md5
+      md5: a138b7c6eb4850b7facd87674c3e190e
+      size: 2786387
+    - path: src/evaluate.py
+      hash: md5
+      md5: 38cc713df9fdcf188307591f0eca591f
+      size: 9768
+      isexec: true
+    - path: src/features.py
+      hash: md5
+      md5: b9539468e64e11623ed246787cc229d0
+      size: 2583
+      isexec: true
+    - path: src/train.py
+      hash: md5
+      md5: 1b7cc03995255e884096e062cd17c23b
+      size: 8631
+      isexec: true
+    params:
+      params.yaml:
+        evaluate:
+          thresholds:
+            min_r2: 0.75
+            max_mae: 14.0
+            max_rmse: 22.0
+          latency:
+            n_samples: 100
+            max_p95_ms: 1000.0
+          reports_dir: reports
+          metrics_file: metrics.json
+          plot_file: predicted_vs_actual.png
+    outs:
+    - path: reports/metrics.json
+      hash: md5
+      md5: 4fd1fa4674e42c8ce4ae91cfe0f4352e
+      size: 1009
+    - path: reports/predicted_vs_actual.png
+      hash: md5
+      md5: c730f2937df6346d02d7fa8b4f262470
+      size: 89071

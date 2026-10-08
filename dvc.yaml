@@ -36,7 +36,6 @@ stages:
     params:
       - train
     outs:
-      - models/input_schema.json
       - models/model.joblib
     metrics:
       - reports/train_metrics.json:
