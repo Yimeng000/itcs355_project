@@ -191,7 +191,7 @@ def main() -> None:
         "test_r2": model_test_metrics["r2"],
     }
 
-    with mlflow.start_run(run_name=args.run_name):
+    with mlflow.start_run(run_name=args.run_name) as run:
         mlflow.log_params(
             {
                 "seed": seed,
@@ -218,6 +218,9 @@ def main() -> None:
         )
 
     summary = {
+        "training_run_id": run.info.run_id,
+        "training_git_commit": git_commit(),
+        "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
         "seed": seed,
         "data_fingerprint": train_fingerprint,
         "baseline_type": baseline_type,
