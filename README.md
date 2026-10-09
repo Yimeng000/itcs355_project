@@ -4,6 +4,8 @@ ITCS355 capstone project: a reproducible taxi fare training pipeline and an auth
 
 **Status, 8 October 2026:** local checks passed with 43 tests; cloud prediction and the CI/CD deployment passed. Monitoring, alerting, a deliberate failure demonstration, the cost report and the model card are still pending. This README describes the implementation currently in the repository.
 
+**Status, 9 October 2026:** 44 local tests passed. Cloud prediction and an earlier CI/CD deployment passed. The monitoring dashboard and invalid-input alert were verified: 20 invalid requests returned HTTP 422, an email arrived, a subsequent valid request returned HTTP 200, and the incident closed. A regression test and failure record are committed. Presentation rehearsal, screenshot organization, cost reporting, the model card and dataset licence verification still require completion. Check Actions for the outcome of each latest push.
+
 ## 1. System overview
 
 | Part | Implementation |
@@ -16,6 +18,8 @@ ITCS355 capstone project: a reproducible taxi fare training pipeline and an auth
 | Serving | FastAPI in Docker, deployed to Cloud Run |
 | CI | Portability audit, Git history credential scan and automated tests |
 | CD | Build, push and deploy a serving image after CI passes; then verify the live API |
+| Monitoring | Cloud Monitoring dashboard: request rate, latency by series, 4xx and 5xx rates |
+| Alert | More than 5 HTTP 422 responses in a 60-second window; email notification |
 
 `src/` contains data and model logic. `service/` contains request validation and prediction. Provider-specific storage, registration and deployment operations are in `cloudlayer/`. Only the GCP adapters are currently implemented; passing the portability audit does not mean other providers are implemented or tested.
 
@@ -228,7 +232,252 @@ Then use `python -m src.register --parent-model=4463872073235693568 --image=IMAG
 
 Google authentication uses Workload Identity Federation through the existing `github-pool/github-provider` and `github-actions` service account. The project's main branch is authorized. The deployment account has image upload permission, Cloud Run Developer and Invoker permissions on the service, and Service Account User permission on its runtime identity. The runtime identity has bucket object read permission. Reproducing deployment in a different project requires provisioning the APIs, registry, bucket, identities, federation bindings and initial Cloud Run service, then updating the workflow and receipt. The deploy adapter updates an existing service; it does not provision these resources.
 
-## 8. Remaining capstone work and cleanup
+## 8. Monitoring, alerting and deliberate failure
+
+The deployed Cloud Run service is monitored through Cloud Monitoring. The dashboard shows request rate, p95 container request latency per series, and 4xx/5xx response rates. An email alert detects bursts of invalid prediction requests.
+
+| Component | Implementation | Repository file |
+|---|---|---|
+| Monitoring dashboard | Request rate, container latency, 4xx and 5xx response rates | [dashboard.json](cloudlayer/monitoring/dashboard.json) |
+| Alert policy | More than 5 HTTP 422 responses in a 60-second window | [invalid-input-alert.json](cloudlayer/monitoring/invalid-input-alert.json) |
+| Deliberate failure | A faulty client sends 20 requests with negative trip distance | [failure-demo.md](docs/failure-demo.md) |
+| Feedback into tests | Reject the burst before model execution and verify a subsequent valid prediction | [test_service.py](tests/test_service.py), `test_invalid_input_burst_does_not_break_predictions` |
+
+The recorded demonstration returned HTTP 422 for all 20 invalid requests, generated an email notification, and subsequently showed a Closed incident. A valid request after the burst returned HTTP 200 with fare 37.2 and model version 2. The full local checks passed with 44 tests. This is an invalid-client-input scenario, not a model outage.
+
+The following steps reproduce this behaviour against the **existing deployed cloud service**. They do not require local training, DVC access, Docker, model registration or another deployment. Running the local API alone will not populate the Cloud Run monitoring dashboard.
+
+### 8.1 Install dependencies and run checks
+
+In an existing checkout with no uncommitted changes:
+
+```bash
+cd ~/itcs355_project
+git pull --ff-only
+source .venv-model/bin/activate
+python --version
+python -m pip install -r requirements-dev.txt
+make check
+```
+
+Expected at this revision: **44 passed**. If you have not cloned the project or created the Python 3.11 environment, complete Section 3 first. Keep your local edits if Git reports a conflict; resolve it before continuing.
+
+Run the failure regression test separately:
+
+```bash
+python -m pytest tests/test_service.py::test_invalid_input_burst_does_not_break_predictions -v
+```
+
+Expected: **1 passed**. This uses a test model and checks 20 rejected inputs, no model calls for invalid input, readiness and a subsequent valid prediction. It does not send email.
+
+### 8.2 Authentication and access requirements
+
+The owner must grant your account access before you run the cloud rehearsal:
+
+| Operation | Required access |
+|---|---|
+| Call the existing Cloud Run API | Cloud Run Invoker on `taxi-fare-api` |
+| View graphs and alert incidents | Monitoring Viewer in the project |
+| Retrieve DVC data for Section 4 | Storage Object Viewer on the data bucket; not needed here |
+
+Use your own account. Logging in does not automatically grant these permissions. Do not share passwords, tokens or personal credential files.
+
+```bash
+gcloud auth login
+gcloud config set project itcs355-6688176
+gcloud auth list --filter=status:ACTIVE --format="value(account)"
+export SERVICE_URL="https://taxi-fare-api-259177885839.asia-southeast1.run.app"
+export TOKEN="$(gcloud auth print-identity-token)"
+export EVIDENCE_DIR="docs/evidence/$(date +%Y-%m-%d)"
+mkdir -p "$EVIDENCE_DIR"
+
+curl -sS "$SERVICE_URL/ready" \
+  -H "Authorization: Bearer $TOKEN" \
+  -w '\nHTTP status: %{http_code}\n'
+```
+
+Expected: HTTP 200 and model version `2`. Keep the token private and refresh it with the export command before a later rehearsal. A 401/403 is an authentication/permission problem, not the deliberate input failure. A 503 means the model is not ready; inspect service logs before continuing.
+
+The existing alert sends email to the owner's configured mailbox. The teammate should inspect the shared incident and ask the owner to confirm email receipt. It will not automatically send to the teammate's email. Do not recreate the dashboard or policy just to repeat the test.
+
+### 8.3 Prepare valid and invalid payloads
+
+```bash
+cat > /tmp/taxi-valid.json <<'EOF'
+{
+  "Trip_Distance_km": 10.0,
+  "Passenger_Count": 2,
+  "Base_Fare": 3.0,
+  "Per_Km_Rate": 1.5,
+  "Per_Minute_Rate": 0.3,
+  "Time_of_Day": "Morning",
+  "Day_of_Week": "Weekday",
+  "Traffic_Conditions": "Low",
+  "Weather": "Clear"
+}
+EOF
+
+python - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path("/tmp/taxi-valid.json").read_text())
+payload["Trip_Distance_km"] = -5
+Path("/tmp/taxi-invalid.json").write_text(json.dumps(payload))
+PY
+```
+
+### 8.4 Successful prediction
+
+```bash
+curl -sS "$SERVICE_URL/predict" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @/tmp/taxi-valid.json \
+  -w '\nHTTP status: %{http_code}\n' \
+  | tee "$EVIDENCE_DIR/01-valid-prediction.txt"
+```
+
+Recorded model v2 expectation: HTTP 200, `estimated_fare=37.2`, `model_version="2"`.
+
+Presentation wording:
+
+> This is our deployed taxi fare prediction service. A valid request returns an estimated fare and the model version.
+
+### 8.5 One invalid prediction
+
+```bash
+curl -sS "$SERVICE_URL/predict" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @/tmp/taxi-invalid.json \
+  -w '\nHTTP status: %{http_code}\n' \
+  | tee "$EVIDENCE_DIR/02-invalid-prediction.txt"
+```
+
+Expected: HTTP 422 with error location `["body", "Trip_Distance_km"]`.
+
+> A negative trip distance is invalid. The service rejects the request and identifies the incorrect field.
+
+### 8.6 Deliberate failure: 20 invalid requests
+
+Before starting, check that the previous alert incident is Closed and coordinate with the owner. Repeated overlapping rehearsals make the counts and notifications harder to interpret.
+
+Run in the same terminal used for the exports above:
+
+```bash
+python - <<'PY'
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
+payload = Path("/tmp/taxi-invalid.json").read_bytes()
+started = datetime.now(timezone.utc).isoformat()
+results = []
+print("Test started at UTC:", started)
+
+for number in range(1, 21):
+    request = Request(
+        os.environ["SERVICE_URL"] + "/predict",
+        data=payload,
+        headers={
+            "Authorization": "Bearer " + os.environ["TOKEN"],
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=60) as response:
+            status = response.status
+    except HTTPError as error:
+        status = error.code
+        error.close()
+    results.append({"request": number, "status": status})
+    print(f"Request {number}/20: HTTP {status}")
+
+report = {
+    "started_at_utc": started,
+    "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+    "results": results,
+}
+destination = Path(os.environ["EVIDENCE_DIR"]) / "03-invalid-burst.json"
+destination.write_text(json.dumps(report, indent=2))
+assert all(row["status"] == 422 for row in results)
+print("All 20 invalid requests were rejected.")
+print("Evidence saved to:", destination)
+PY
+```
+
+> Our deliberate failure is a faulty client repeatedly sending invalid input. We send twenty invalid requests to demonstrate detection and handling.
+
+### 8.7 Monitoring and notification verification
+
+In Google Cloud Console, select project `itcs355-6688176`:
+
+1. Open **Monitoring → Dashboards → ITCS355 Taxi Fare Monitoring**.
+2. Select a time range that includes your test and refresh.
+3. Open **Monitoring → Alerting → Taxi Fare - Invalid Input Surge**.
+4. Inspect the alert incident and ask the owner to check the configured mailbox.
+
+| Existing resource | ID / configuration file |
+|---|---|
+| Dashboard | `4b8c923c-02c9-450e-9f28-6bdf0142a602`; [dashboard.json](cloudlayer/monitoring/dashboard.json) |
+| Alert policy | `16399261076497637481`; [invalid-input-alert.json](cloudlayer/monitoring/invalid-input-alert.json) |
+| Email notification channel | `12155343553823774073` |
+
+The policy counts HTTP 422 responses across the service using 60-second alignment, with a threshold strictly greater than 5. The dashboard's 4xx chart shows a **rate**, not this count. Nearby invalid requests can make the policy count exceed the 20-request burst alone.
+
+Monitoring and notification delivery are asynchronous. Record when the incident/email actually appears; do not assume it will appear immediately. The latency chart shows p95 container request latency per series, not one overall end-to-end latency measurement. No data on a 5xx chart is not proof that every possible failure was measured.
+
+> Monitoring detected the invalid-input burst and sent an email. HTTP 422 represents rejected client input; it does not mean the model crashed.
+
+### 8.8 Continued service, alert closure and evidence
+
+```bash
+curl -sS "$SERVICE_URL/predict" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @/tmp/taxi-valid.json \
+  -w '\nHTTP status: %{http_code}\n' \
+  | tee "$EVIDENCE_DIR/04-valid-after-burst.txt"
+
+python -m pytest \
+  tests/test_service.py::test_invalid_input_burst_does_not_break_predictions \
+  -v | tee "$EVIDENCE_DIR/05-regression-test.txt"
+```
+
+Expected: valid prediction HTTP 200 and test **1 passed**. Stop sending invalid requests, then inspect the incident until it shows **Closed**. Closure timing is separate from the successful prediction; a valid request does not directly close the incident.
+
+> Valid requests still succeed after the invalid-input burst. We added this scenario to our automated tests so future changes must preserve this behaviour.
+
+Save screenshots in the evidence directory: monitoring graph, incident details, notification email and Closed state. Exclude authentication tokens and redact unrelated personal information. See [the original failure record](docs/failure-demo.md). Record your own rehearsal timestamps separately rather than changing the original event times.
+
+### 8.9 Presentation evidence and troubleshooting
+
+Use the rehearsal evidence to supplement a live demo. Prepare commands and browser tabs beforehand. Run a valid prediction, invalid input and a subsequent valid prediction live; have the burst command ready. Show saved evidence if notification delivery exceeds the presentation time, and explicitly identify it as rehearsal evidence. Inspect the latest [Actions run](https://github.com/Yimeng000/itcs355_project/actions) before claiming the current deployment passed.
+
+| Symptom | Check |
+|---|---|
+| Local `GET /` returns 404 | There is no home route; use `/docs`, `/health` or `/ready` |
+| `GET /predict` returns 405 | Predictions require POST with JSON |
+| Local readiness returns 503 | Obtain/train the model and check startup logs; health 200 alone is insufficient |
+| Cloud request returns 401/403 | Refresh the token; check your own account and Cloud Run Invoker permission |
+| No cloud chart after local requests | These charts monitor the deployed Cloud Run service, not localhost |
+| Teammate receives no email | The policy uses the owner's mailbox; inspect the incident and coordinate |
+| Cloud Shell browser cannot reach localhost | Use Cloud Shell Web Preview, not your computer's localhost |
+
+For a local API running **inside Cloud Shell**, start Uvicorn with `--host 0.0.0.0 --port 8080`. Keep it running and select **Web Preview → Preview on port 8080**, then append `/docs` to that preview URL. Alternatively, in another Cloud Shell terminal, print:
+
+```bash
+printf 'https://8080-%s/docs\n' "$WEB_HOST"
+```
+
+See [Google's Cloud Shell Web Preview instructions](https://docs.cloud.google.com/shell/docs/using-web-preview). The Cloud Shell preview URL and authenticated Cloud Run service URL are different surfaces.
+
+## 9. Remaining capstone work and cleanup
 
 | Requirement | Current evidence / remaining work |
 |---|---|
@@ -236,15 +485,15 @@ Google authentication uses Workload Identity Federation through the existing `gi
 | Automated reproducible training | DVC stages and pinned training dependencies; locally verified |
 | Registered model with lineage | `reports/registration.json` and `reports/model_lineage.json`, plus uploaded reports |
 | Deployed inference | Authenticated Cloud Run API, recorded 200 prediction |
-| CI/CD with failing checks | 43 tests, audits and live deployment smoke checks; successful run observed |
-| Monitoring dashboard | Pending configuration and evidence |
-| Working alert | Pending configuration and observed notification |
-| Deliberate failure and feedback into tests | Pending planned injection, observation, recovery and regression test evidence |
+| CI/CD with failing checks | 44 local tests, audits and live deployment smoke checks; earlier successful run observed |
+| Monitoring dashboard | Committed JSON configuration; cloud graphs observed |
+| Working alert | Committed policy; email received and incident Closed on 9 October |
+| Deliberate failure and feedback into tests | 20 rejected requests, continued valid prediction, alert notification/closure, regression test and [failure record](docs/failure-demo.md); presentation rehearsal still needed |
 | Cost per 1,000 predictions | Pending measured workload and documented calculation |
 | One-page model card | Pending |
 | Dataset licence/provenance | Pending verification |
 
-Existing readiness handling, input validation and logs are useful reliability features, but they do not by themselves complete the dashboard, alert or deliberate failure requirements.
+The invalid-input scenario demonstrates a faulty client, not a model outage. The new test checks service behaviour; the cloud rehearsal demonstrates the notification. The live presentation remains separate from repository completion.
 
 After the required presentation and evidence collection, disable the deployment workflow in GitHub Actions before removing cloud resources; otherwise another main push can attempt deployment again. To remove this project's serving service:
 
