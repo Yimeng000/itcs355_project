@@ -91,3 +91,37 @@ def test_ready_with_model(client):
         "status": "ready",
         "model_version": "test-v1",
     }
+
+def test_invalid_input_burst_does_not_break_predictions(client):
+    from unittest.mock import Mock
+
+    model = ExampleModel()
+    model.predict = Mock(wraps=model.predict)
+    app.state.model = model
+    app.state.model_version = "test-v1"
+
+    invalid_input = {**VALID_INPUT, "Trip_Distance_km": -5}
+
+    # Reproduce the deliberate failure: 20 invalid requests.
+    for _ in range(20):
+        response = client.post("/predict", json=invalid_input)
+        assert response.status_code == 422
+        assert any(
+            error["loc"] == ["body", "Trip_Distance_km"]
+            for error in response.json()["detail"]
+        )
+
+    # Invalid requests must be rejected before reaching the model.
+    model.predict.assert_not_called()
+
+    # The service must still be ready and accept valid requests.
+    assert client.get("/health").status_code == 200
+    assert client.get("/ready").status_code == 200
+
+    response = client.post("/predict", json=VALID_INPUT)
+    assert response.status_code == 200
+    assert response.json() == {
+        "estimated_fare": 34.23,
+        "model_version": "test-v1",
+    }
+    model.predict.assert_called_once()
