@@ -1,0 +1,33 @@
+{
+  "displayName": "Taxi Fare - Invalid Input Surge",
+  "enabled": true,
+  "combiner": "OR",
+  "notificationChannels": [
+    "projects/itcs355-6688176/notificationChannels/12155343553823774073"
+  ],
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Taxi prediction requests are being rejected with HTTP 422.\n\nCheck the request logs and identify invalid or missing fields. Correct the client payload using service/schemas.py, then verify a valid prediction returns HTTP 200. This alert indicates rejected input, not necessarily server failure."
+  },
+  "conditions": [
+    {
+      "displayName": "More than 5 HTTP 422 responses in a 60-second window",
+      "conditionThreshold": {
+        "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"itcs355-6688176\" AND resource.labels.location=\"asia-southeast1\" AND resource.labels.service_name=\"taxi-fare-api\" AND metric.type=\"run.googleapis.com/request_count\" AND metric.labels.response_code=\"422\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 5,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ]
+}
