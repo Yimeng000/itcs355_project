@@ -1,0 +1,13 @@
+{
+  "requests": 1000,
+  "billable_seconds": 70.3,
+  "list_price_usd": {
+    "cpu": 0.002362,
+    "memory": 0.000246,
+    "requests": 0.0004,
+    "total": 0.003008
+  },
+  "list_price_per_1000_usd": 0.003008,
+  "list_price_per_1000_thb": 0.1083,
+  "note": "List price, before the monthly free tier."
+}
