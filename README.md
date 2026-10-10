@@ -16,6 +16,9 @@ ITCS355 capstone project: a reproducible taxi fare training pipeline and an auth
 | CD | Build, push and deploy a serving image after CI passes; then verify the live API |
 | Monitoring | Cloud Monitoring dashboard: request rate, latency by series, 4xx and 5xx rates |
 | Alert | More than 5 HTTP 422 responses in a 60-second window; email notification |
+| Cost report | Estimated USD 0.003008 per 1,000 predictions; assumptions and evidence documented |
+| Model card | Dataset, intended use, inputs, evaluation and limitations documented; one-page layout verification pending |
+| Deliberate failure | Invalid-input burst triggered an email alert; continued prediction verified and regression test added |
 
 `src/` contains data and model logic. `service/` contains request validation and prediction. Provider-specific storage, registration and deployment operations are in `cloudlayer/`. Only the GCP adapters are currently implemented; passing the portability audit does not mean other providers are implemented or tested.
 
