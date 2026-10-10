@@ -2,10 +2,6 @@
 
 ITCS355 capstone project: a reproducible taxi fare training pipeline and an authenticated prediction API deployed on Google Cloud Run. Models are registered in Vertex AI with training lineage. GitHub Actions tests and deploys changes to the serving application.
 
-**Status, 8 October 2026:** local checks passed with 43 tests; cloud prediction and the CI/CD deployment passed. Monitoring, alerting, a deliberate failure demonstration, the cost report and the model card are still pending. This README describes the implementation currently in the repository.
-
-**Status, 9 October 2026:** 44 local tests passed. Cloud prediction and an earlier CI/CD deployment passed. The monitoring dashboard and invalid-input alert were verified: 20 invalid requests returned HTTP 422, an email arrived, a subsequent valid request returned HTTP 200, and the incident closed. A regression test and failure record are committed. Presentation rehearsal, screenshot organization, cost reporting, the model card and dataset licence verification still require completion. Check Actions for the outcome of each latest push.
-
 ## 1. System overview
 
 | Part | Implementation |
@@ -25,6 +21,14 @@ ITCS355 capstone project: a reproducible taxi fare training pipeline and an auth
 
 There is currently one cloud serving environment, `taxi-fare-api`. There is no separate staging service. Development and unit testing run locally and in GitHub Actions.
 
+Supporting documentation:
+
+- [Model card](docs/model-card.md): intended use, dataset, inputs, evaluation and limitations.
+- [Cost report](docs/cost-report.md): estimated cost of USD 0.003008 per 1,000 predictions, before free-tier allowances and credits; scope and assumptions are documented.
+- [Cost calculation](reports/cost_estimate.json): saved calculation output.
+- [Failure demonstration](docs/failure-demo.md): invalid-input burst, alert and regression test.
+- [Cost evidence](docs/evidence/cost/): billable-time and Singapore pricing screenshots.
+
 ## 2. Dataset and prediction scope
 
 Source: [Taxi Price Prediction / Taxi Price Regression on Kaggle](https://www.kaggle.com/datasets/denkuznetz/taxi-price-prediction), published by `denkuznetz`.
@@ -36,7 +40,10 @@ Source: [Taxi Price Prediction / Taxi Price Regression on Kaggle](https://www.ka
 - Seed 42 split: 665 training, 143 validation and 143 test records.
 - `Trip_Duration_Minutes` is removed because actual trip duration is unavailable before a trip finishes.
 - Missing input values are handled by the training pipeline's imputers.
-- **Dataset licence, currency and original data collection/generation details still require verification against the publisher's data card before final submission.** No currency or real-world provenance is claimed here.
+- The publisher describes the dataset as realistic synthetic data, rather than recorded taxi journeys.
+- Fare values are in USD.
+- Dataset licence: [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0), as stated on the publisher's Kaggle page.
+- The actual CSV columns define this project's inputs; the publisher's general description does not exactly match the CSV column names.
 
 The service estimates a fare from user-supplied distance, pricing rates and conditions. It does not calculate routes, retrieve live weather or traffic, or guarantee the actual fare charged by a taxi operator. Distance must be an estimate available when requesting the prediction.
 
@@ -178,7 +185,7 @@ Model files are not bundled into the image. If `MODEL_ARTIFACT_URI` is set, the 
 | Cloud Run service | `taxi-fare-api` |
 | Runtime service account | `taxi-predict-runtime@itcs355-6688176.iam.gserviceaccount.com` |
 | Service URL | `https://taxi-fare-api-259177885839.asia-southeast1.run.app` |
-| Scaling / resources | Minimum 0, maximum 1 configured revision instance; 1 CPU, 1 GiB memory; concurrency 4 |
+| Scaling / resources | Revision maximum 1 instance; service-level maximum 20; 1 CPU, 1 GiB memory; concurrency 4 |
 
 The service requires authentication. An authorized user can call it with:
 
@@ -477,29 +484,43 @@ printf 'https://8080-%s/docs\n' "$WEB_HOST"
 
 See [Google's Cloud Shell Web Preview instructions](https://docs.cloud.google.com/shell/docs/using-web-preview). The Cloud Shell preview URL and authenticated Cloud Run service URL are different surfaces.
 
-## 9. Remaining capstone work and cleanup
+## 9. Completion status, remaining work and cleanup
 
 | Requirement | Current evidence / remaining work |
 |---|---|
-| Versioned data and code | Git, `.dvc` metadata and `dvc.lock`; private remote access required |
+| Versioned data and code | Git, DVC metadata and `dvc.lock`; private remote access required |
 | Automated reproducible training | DVC stages and pinned training dependencies; locally verified |
 | Registered model with lineage | `reports/registration.json` and `reports/model_lineage.json`, plus uploaded reports |
-| Deployed inference | Authenticated Cloud Run API, recorded 200 prediction |
-| CI/CD with failing checks | 44 local tests, audits and live deployment smoke checks; earlier successful run observed |
-| Monitoring dashboard | Committed JSON configuration; cloud graphs observed |
-| Working alert | Committed policy; email received and incident Closed on 9 October |
-| Deliberate failure and feedback into tests | 20 rejected requests, continued valid prediction, alert notification/closure, regression test and [failure record](docs/failure-demo.md); presentation rehearsal still needed |
-| Cost per 1,000 predictions | Pending measured workload and documented calculation |
-| One-page model card | Pending |
-| Dataset licence/provenance | Pending verification |
+| Deployed inference | Authenticated Cloud Run API; successful prediction recorded |
+| CI/CD with failing checks | 44 local tests, audits and deployment smoke checks; verify the latest GitHub Actions run before submission |
+| Monitoring dashboard | Committed configuration and observed cloud graphs |
+| Working alert | Email received and incident Closed on 9 October |
+| Deliberate failure and feedback into tests | 20 invalid requests rejected, subsequent valid prediction successful, alert verified and regression test added; see [failure record](docs/failure-demo.md) |
+| Cost per 1,000 predictions | Estimated USD 0.003008 before free-tier allowances and credits; calculation scope and limitations in [cost report](docs/cost-report.md), with [evidence](docs/evidence/cost/) |
+| One-page model card | [Model card content](docs/model-card.md) completed; printed/exported one-page layout still needs verification |
+| Dataset licence and provenance | Publisher identifies synthetic data, USD fares and Apache 2.0 licensing; documented in the model card |
 
-The invalid-input scenario demonstrates a faulty client, not a model outage. The new test checks service behaviour; the cloud rehearsal demonstrates the notification. The live presentation remains separate from repository completion.
+Before the presentation and repository submission:
 
-After the required presentation and evidence collection, disable the deployment workflow in GitHub Actions before removing cloud resources; otherwise another main push can attempt deployment again. To remove this project's serving service:
+1. Verify that the latest GitHub Actions run passes.
+2. Check the model card's printed/exported layout fits one readable page.
+3. Repeat the failure demonstration and organize screenshots of the monitoring graph, alert, email, closure and subsequent successful prediction.
+4. Rehearse the eight-minute presentation and prepare for questions.
+5. Check that README links work and that the documented setup can be followed from a fresh checkout.
+
+The deliberate failure simulates a faulty client repeatedly sending invalid input. The automated test verifies rejection and continued prediction; the cloud demonstration verifies monitoring and notification. The presentation remains separate from repository completion.
+
+### Cleanup after the required demonstration and submission
+
+Keep the service available for the required demonstration and any agreed assessment access. Before final cleanup, preserve evidence and disable the deployment workflow in GitHub Actions so another main push does not redeploy the service.
+
+To remove this project's serving service:
 
 ```bash
 gcloud run services delete taxi-fare-api \
   --project=itcs355-6688176 --region=asia-southeast1
 ```
 
-There is currently no complete project teardown command. Review project-specific stored images, model versions, storage objects and IAM bindings separately. The bucket, Artifact Registry repository and GitHub identity pool are shared with course labs; deleting those shared resources wholesale is not a project-only cleanup. Keep required evidence before removing artifacts. Minimum-instance zero is not a substitute for final resource cleanup.
+There is currently no complete project teardown command. Review project-specific stored images, model versions, storage objects, monitoring resources and IAM bindings separately. The bucket, Artifact Registry repository and GitHub identity pool are shared with course labs; do not delete shared resources wholesale as project-only cleanup.
+
+Complete resource cleanup as required by the course submission rules. Scaling to zero does not replace final cleanup.
