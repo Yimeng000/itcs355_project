@@ -102,3 +102,20 @@ Billing should be reviewed for both capstone and remaining lab resources.
 
 After the required demonstrations and submission, project resources
 should be cleaned up according to the course requirements.
+
+## 7. Evidence
+
+### Singapore request-based pricing
+
+![Singapore pricing](evidence/cost/singapore-pricing.png)
+
+### Billable instance time
+
+Monitoring used ALIGN_SUM with 60-second intervals and REDUCE_SUM,
+filtered to taxi-fare-api.
+
+![23:39 — 1.6 seconds](evidence/cost/billable-2339.png)
+
+![23:40 — 35.4 seconds](evidence/cost/billable-2340.png)
+
+![23:41 — 33.3 seconds](evidence/cost/billable-2341.png)
