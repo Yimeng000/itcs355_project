@@ -117,20 +117,19 @@ jobs:
             reports/ci/comparison.json
             dvc.lock
 
-  deploy:
-    needs: [test, reproduce]
+  staging:
+    needs:
+    - test
+    - reproduce
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
     concurrency:
-      group: taxi-production-deployment
+      group: taxi-staging-deployment
       cancel-in-progress: false
-
     permissions:
       contents: read
       id-token: write
-
     env:
       CLOUD_PROVIDER: gcp
       PROJECT_ID: itcs355-6688176
@@ -138,268 +137,189 @@ jobs:
       IMAGE_REPOSITORY: asia-southeast1-docker.pkg.dev/itcs355-6688176/itcs355/taxi-fare
       WIF_PROVIDER: projects/259177885839/locations/global/workloadIdentityPools/github-pool/providers/github-provider
       DEPLOY_ACCOUNT: github-actions@itcs355-6688176.iam.gserviceaccount.com
-
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Build serving image
+      run: "docker build \\\n  -f service/Dockerfile.serve \\\n  -t \"$IMAGE_REPOSITORY:$GITHUB_SHA\" .\n"
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        workload_identity_provider: ${{ env.WIF_PROVIDER }}
+        service_account: ${{ env.DEPLOY_ACCOUNT }}
+    - uses: google-github-actions/setup-gcloud@v3
+    - name: Push serving image
+      id: image
+      run: "gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet\ndocker push \"$IMAGE_REPOSITORY:$GITHUB_SHA\"\
+        \ndigest=$(gcloud artifacts docker images describe \\\n  \"$IMAGE_REPOSITORY:$GITHUB_SHA\" \\\n  --project=\"$PROJECT_ID\"\
+        \ \\\n  --format=\"value(image_summary.digest)\")\ntest -n \"$digest\"\necho \"uri=$IMAGE_REPOSITORY@$digest\" >> \"\
+        $GITHUB_OUTPUT\"\n"
+    - name: Deploy registered model to staging
+      id: staging_deploy
+      env:
+        SERVING_IMAGE: ${{ steps.image.outputs.uri }}
+      run: 'python -m cloudlayer.deploy --service=taxi-fare-staging --image="$SERVING_IMAGE"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        '
+    - name: Get staging identity token
+      id: staging_auth
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        workload_identity_provider: ${{ env.WIF_PROVIDER }}
+        service_account: ${{ env.DEPLOY_ACCOUNT }}
+        token_format: id_token
+        id_token_audience: ${{ steps.staging_deploy.outputs.url }}
+        id_token_include_email: true
+    - name: Verify staging readiness, prediction and invalid input
+      env:
+        TAXI_URL: ${{ steps.staging_deploy.outputs.url }}
+        TAXI_TOKEN: ${{ steps.staging_auth.outputs.id_token }}
+      run: "python - <<'PY'\nimport json\nimport os\nfrom urllib.request import Request, urlopen\nfrom urllib.error import HTTPError\n\
+        \ndef call(path, payload=None):\n    headers = {\n        \"Authorization\": \"Bearer \" + os.environ[\"TAXI_TOKEN\"\
+        ],\n        \"Content-Type\": \"application/json\",\n    }\n    data = None if payload is None else json.dumps(payload).encode()\n\
+        \    request = Request(os.environ[\"TAXI_URL\"] + path,\n                      headers=headers, data=data)\n    try:\n\
+        \        with urlopen(request, timeout=60) as response:\n            return response.status, json.loads(response.read())\n\
+        \    except HTTPError as error:\n        return error.code, json.loads(error.read())\n\nreceipt = json.load(open(\"\
+        reports/registration.json\"))\nversion = str(receipt[\"version_id\"])\nstatus, ready = call(\"/ready\")\nassert status\
+        \ == 200, (status, ready)\nassert ready[\"model_version\"] == version, ready\n\npayload = {\n    \"Trip_Distance_km\"\
+        : 10.0, \"Passenger_Count\": 2,\n    \"Base_Fare\": 3.0, \"Per_Km_Rate\": 1.5,\n    \"Per_Minute_Rate\": 0.3, \"Time_of_Day\"\
+        : \"Morning\",\n    \"Day_of_Week\": \"Weekday\", \"Traffic_Conditions\": \"Low\",\n    \"Weather\": \"Clear\",\n}\n\
+        status, prediction = call(\"/predict\", payload)\nassert status == 200, (status, prediction)\nassert prediction[\"model_version\"\
+        ] == version, prediction\nassert prediction[\"estimated_fare\"] == 37.2, prediction\n\npayload[\"Trip_Distance_km\"\
+        ] = -5\nstatus, result = call(\"/predict\", payload)\nassert status == 422, (status, result)\nprint(\"Cloud readiness,\
+        \ prediction and invalid-input checks passed\")\nPY\n"
+    - name: Preserve staging deployment evidence
+      run: cp reports/deployment.json reports/staging-deployment.json
+    - name: Save staging evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: staging-${{ github.sha }}
+        if-no-files-found: warn
+        path: reports/staging-deployment.json
+    name: staging
+    outputs:
+      image: ${{ steps.image.outputs.uri }}
+      url: ${{ steps.staging_deploy.outputs.url }}
+  production:
+    needs:
+    - staging
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: taxi-production-deployment
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLOUD_PROVIDER: gcp
+      PROJECT_ID: itcs355-6688176
+      REGION: asia-southeast1
+      IMAGE_REPOSITORY: asia-southeast1-docker.pkg.dev/itcs355-6688176/itcs355/taxi-fare
+      WIF_PROVIDER: projects/259177885839/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+      DEPLOY_ACCOUNT: github-actions@itcs355-6688176.iam.gserviceaccount.com
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        workload_identity_provider: ${{ env.WIF_PROVIDER }}
+        service_account: ${{ env.DEPLOY_ACCOUNT }}
+    - uses: google-github-actions/setup-gcloud@v3
+    - name: Save production traffic before updating
+      id: production_snapshot
+      run: "python -m cloudlayer.rollback snapshot --service=taxi-fare-api --project=\"$PROJECT_ID\" --region=\"$REGION\" --snapshot=reports/rollback/production-before.json\n\
+        python - <<'PY'\nimport json\nimport os\nfrom pathlib import Path\n\nsnapshot = json.loads(Path(\"reports/rollback/production-before.json\"\
+        ).read_text())\nwith open(os.environ[\"GITHUB_OUTPUT\"], \"a\") as output:\n    output.write(\"url=\" + snapshot[\"\
+        service_url\"] + \"\\n\")\nPY\n"
+    - name: Deploy registered model service
+      id: deploy
+      env:
+        SERVING_IMAGE: ${{ needs.staging.outputs.image }}
+      run: "python -m cloudlayer.deploy \\\n  --service=taxi-fare-api \\\n  --image=\"$SERVING_IMAGE\"\n"
+    - name: Get identity token for service checks
+      id: smoke_auth
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        workload_identity_provider: ${{ env.WIF_PROVIDER }}
+        service_account: ${{ env.DEPLOY_ACCOUNT }}
+        token_format: id_token
+        id_token_audience: ${{ steps.deploy.outputs.url }}
+        id_token_include_email: true
+    - name: Verify cloud readiness, prediction and invalid input
+      env:
+        TAXI_URL: ${{ steps.deploy.outputs.url }}
+        TAXI_TOKEN: ${{ steps.smoke_auth.outputs.id_token }}
+      run: "python - <<'PY'\nimport json\nimport os\nfrom urllib.request import Request, urlopen\nfrom urllib.error import HTTPError\n\
+        \ndef call(path, payload=None):\n    headers = {\n        \"Authorization\": \"Bearer \" + os.environ[\"TAXI_TOKEN\"\
+        ],\n        \"Content-Type\": \"application/json\",\n    }\n    data = None if payload is None else json.dumps(payload).encode()\n\
+        \    request = Request(os.environ[\"TAXI_URL\"] + path,\n                      headers=headers, data=data)\n    try:\n\
+        \        with urlopen(request, timeout=60) as response:\n            return response.status, json.loads(response.read())\n\
+        \    except HTTPError as error:\n        return error.code, json.loads(error.read())\n\nreceipt = json.load(open(\"\
+        reports/registration.json\"))\nversion = str(receipt[\"version_id\"])\nstatus, ready = call(\"/ready\")\nassert status\
+        \ == 200, (status, ready)\nassert ready[\"model_version\"] == version, ready\n\npayload = {\n    \"Trip_Distance_km\"\
+        : 10.0, \"Passenger_Count\": 2,\n    \"Base_Fare\": 3.0, \"Per_Km_Rate\": 1.5,\n    \"Per_Minute_Rate\": 0.3, \"Time_of_Day\"\
+        : \"Morning\",\n    \"Day_of_Week\": \"Weekday\", \"Traffic_Conditions\": \"Low\",\n    \"Weather\": \"Clear\",\n}\n\
+        status, prediction = call(\"/predict\", payload)\nassert status == 200, (status, prediction)\nassert prediction[\"model_version\"\
+        ] == version, prediction\nassert prediction[\"estimated_fare\"] == 37.2, prediction\n\npayload[\"Trip_Distance_km\"\
+        ] = -5\nstatus, result = call(\"/predict\", payload)\nassert status == 422, (status, result)\nprint(\"Cloud readiness,\
+        \ prediction and invalid-input checks passed\")\nPY\n"
+    - name: Restore production traffic after failed deployment or checks
+      id: production_restore
+      if: failure() && steps.production_snapshot.outcome == 'success' && (steps.deploy.outcome == 'success' || steps.deploy.outcome
+        == 'failure')
+      run: 'python -m cloudlayer.rollback restore --service=taxi-fare-api --project="$PROJECT_ID" --region="$REGION" --snapshot=reports/rollback/production-before.json
+        --report=reports/rollback/production-restored.json
 
-      - name: Build serving image
-        run: |
-          docker build \
-            -f service/Dockerfile.serve \
-            -t "$IMAGE_REPOSITORY:$GITHUB_SHA" .
+        '
+    - name: Get token to verify restored service
+      id: restore_auth
+      if: failure() && steps.production_restore.outcome == 'success'
+      uses: google-github-actions/auth@v3
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        workload_identity_provider: ${{ env.WIF_PROVIDER }}
+        service_account: ${{ env.DEPLOY_ACCOUNT }}
+        token_format: id_token
+        id_token_audience: ${{ steps.production_snapshot.outputs.url }}
+        id_token_include_email: true
+    - name: Verify restored API
+      if: failure() && steps.production_restore.outcome == 'success' && steps.restore_auth.outcome == 'success'
+      env:
+        TAXI_URL: ${{ steps.production_snapshot.outputs.url }}
+        TAXI_TOKEN: ${{ steps.restore_auth.outputs.id_token }}
+      run: "python - <<'PY'\nimport json\nimport math\nimport os\nfrom pathlib import Path\nfrom urllib.request import Request,\
+        \ urlopen\n\ndef call(path, payload=None):\n    data = None if payload is None else json.dumps(payload).encode()\n \
+        \   request = Request(\n        os.environ[\"TAXI_URL\"] + path,\n        data=data,\n        headers={\n          \
+        \  \"Authorization\": \"Bearer \" + os.environ[\"TAXI_TOKEN\"],\n            \"Content-Type\": \"application/json\"\
+        ,\n        },\n    )\n    with urlopen(request, timeout=60) as response:\n        assert response.status == 200\n  \
+        \      return json.loads(response.read())\n\nready = call(\"/ready\")\npayload = {\n    \"Trip_Distance_km\": 10.0,\
+        \ \"Passenger_Count\": 2,\n    \"Base_Fare\": 3.0, \"Per_Km_Rate\": 1.5,\n    \"Per_Minute_Rate\": 0.3, \"Time_of_Day\"\
+        : \"Morning\",\n    \"Day_of_Week\": \"Weekday\", \"Traffic_Conditions\": \"Low\",\n    \"Weather\": \"Clear\",\n}\n\
+        prediction = call(\"/predict\", payload)\nfare = prediction[\"estimated_fare\"]\nassert isinstance(fare, (int, float))\
+        \ and not isinstance(fare, bool)\nassert math.isfinite(fare) and fare >= 0\nassert prediction[\"model_version\"] ==\
+        \ ready[\"model_version\"]\nPath(\"reports/rollback/production-api-restored.json\").write_text(\n    json.dumps({\n\
+        \        \"api_checks_passed\": True,\n        \"ready\": ready,\n        \"prediction\": prediction,\n    }, indent=2)\n\
+        )\nprint(\"Restored API readiness and prediction checks passed\")\nPY\n"
+    - name: Save deployment evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: production-${{ github.sha }}
+        path: 'reports/deployment.json
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_ACCOUNT }}
+          reports/rollback/production-*.json
 
-      - uses: google-github-actions/setup-gcloud@v3
-
-      - name: Push serving image
-        id: image
-        run: |
-          gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
-          docker push "$IMAGE_REPOSITORY:$GITHUB_SHA"
-          digest=$(gcloud artifacts docker images describe \
-            "$IMAGE_REPOSITORY:$GITHUB_SHA" \
-            --project="$PROJECT_ID" \
-            --format="value(image_summary.digest)")
-          test -n "$digest"
-          echo "uri=$IMAGE_REPOSITORY@$digest" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy registered model to staging
-        id: staging_deploy
-        env:
-          SERVING_IMAGE: ${{ steps.image.outputs.uri }}
-        run: |
-          python -m cloudlayer.deploy --service=taxi-fare-staging --image="$SERVING_IMAGE"
-
-      - name: Get staging identity token
-        id: staging_auth
-        uses: google-github-actions/auth@v3
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_ACCOUNT }}
-          token_format: id_token
-          id_token_audience: ${{ steps.staging_deploy.outputs.url }}
-          id_token_include_email: true
-
-      - name: Verify staging readiness, prediction and invalid input
-        env:
-          TAXI_URL: ${{ steps.staging_deploy.outputs.url }}
-          TAXI_TOKEN: ${{ steps.staging_auth.outputs.id_token }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from urllib.request import Request, urlopen
-          from urllib.error import HTTPError
-
-          def call(path, payload=None):
-              headers = {
-                  "Authorization": "Bearer " + os.environ["TAXI_TOKEN"],
-                  "Content-Type": "application/json",
-              }
-              data = None if payload is None else json.dumps(payload).encode()
-              request = Request(os.environ["TAXI_URL"] + path,
-                                headers=headers, data=data)
-              try:
-                  with urlopen(request, timeout=60) as response:
-                      return response.status, json.loads(response.read())
-              except HTTPError as error:
-                  return error.code, json.loads(error.read())
-
-          receipt = json.load(open("reports/registration.json"))
-          version = str(receipt["version_id"])
-          status, ready = call("/ready")
-          assert status == 200, (status, ready)
-          assert ready["model_version"] == version, ready
-
-          payload = {
-              "Trip_Distance_km": 10.0, "Passenger_Count": 2,
-              "Base_Fare": 3.0, "Per_Km_Rate": 1.5,
-              "Per_Minute_Rate": 0.3, "Time_of_Day": "Morning",
-              "Day_of_Week": "Weekday", "Traffic_Conditions": "Low",
-              "Weather": "Clear",
-          }
-          status, prediction = call("/predict", payload)
-          assert status == 200, (status, prediction)
-          assert prediction["model_version"] == version, prediction
-          assert prediction["estimated_fare"] == 37.2, prediction
-
-          payload["Trip_Distance_km"] = -5
-          status, result = call("/predict", payload)
-          assert status == 422, (status, result)
-          print("Cloud readiness, prediction and invalid-input checks passed")
-          PY
-
-      - name: Preserve staging deployment evidence
-        run: cp reports/deployment.json reports/staging-deployment.json
-
-      - name: Save production traffic before updating
-        id: production_snapshot
-        run: |
-          python -m cloudlayer.rollback snapshot --service=taxi-fare-api --project="$PROJECT_ID" --region="$REGION" --snapshot=reports/rollback/production-before.json
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          snapshot = json.loads(Path("reports/rollback/production-before.json").read_text())
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("url=" + snapshot["service_url"] + "\n")
-          PY
-
-      - name: Deploy registered model service
-        id: deploy
-        env:
-          SERVING_IMAGE: ${{ steps.image.outputs.uri }}
-        run: |
-          python -m cloudlayer.deploy \
-            --service=taxi-fare-api \
-            --image="$SERVING_IMAGE"
-
-      - name: Get identity token for service checks
-        id: smoke_auth
-        uses: google-github-actions/auth@v3
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_ACCOUNT }}
-          token_format: id_token
-          id_token_audience: ${{ steps.deploy.outputs.url }}
-          id_token_include_email: true
-
-      - name: Verify cloud readiness, prediction and invalid input
-        env:
-          TAXI_URL: ${{ steps.deploy.outputs.url }}
-          TAXI_TOKEN: ${{ steps.smoke_auth.outputs.id_token }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from urllib.request import Request, urlopen
-          from urllib.error import HTTPError
-
-          def call(path, payload=None):
-              headers = {
-                  "Authorization": "Bearer " + os.environ["TAXI_TOKEN"],
-                  "Content-Type": "application/json",
-              }
-              data = None if payload is None else json.dumps(payload).encode()
-              request = Request(os.environ["TAXI_URL"] + path,
-                                headers=headers, data=data)
-              try:
-                  with urlopen(request, timeout=60) as response:
-                      return response.status, json.loads(response.read())
-              except HTTPError as error:
-                  return error.code, json.loads(error.read())
-
-          receipt = json.load(open("reports/registration.json"))
-          version = str(receipt["version_id"])
-          status, ready = call("/ready")
-          assert status == 200, (status, ready)
-          assert ready["model_version"] == version, ready
-
-          payload = {
-              "Trip_Distance_km": 10.0, "Passenger_Count": 2,
-              "Base_Fare": 3.0, "Per_Km_Rate": 1.5,
-              "Per_Minute_Rate": 0.3, "Time_of_Day": "Morning",
-              "Day_of_Week": "Weekday", "Traffic_Conditions": "Low",
-              "Weather": "Clear",
-          }
-          status, prediction = call("/predict", payload)
-          assert status == 200, (status, prediction)
-          assert prediction["model_version"] == version, prediction
-          assert prediction["estimated_fare"] == 37.2, prediction
-
-          payload["Trip_Distance_km"] = -5
-          status, result = call("/predict", payload)
-          assert status == 422, (status, result)
-          print("Cloud readiness, prediction and invalid-input checks passed")
-          PY
-
-      - name: Restore production traffic after failed deployment or checks
-        id: production_restore
-        if: failure() && steps.production_snapshot.outcome == 'success' && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
-        run: |
-          python -m cloudlayer.rollback restore --service=taxi-fare-api --project="$PROJECT_ID" --region="$REGION" --snapshot=reports/rollback/production-before.json --report=reports/rollback/production-restored.json
-
-      - name: Get token to verify restored service
-        id: restore_auth
-        if: failure() && steps.production_restore.outcome == 'success'
-        uses: google-github-actions/auth@v3
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_ACCOUNT }}
-          token_format: id_token
-          id_token_audience: ${{ steps.production_snapshot.outputs.url }}
-          id_token_include_email: true
-
-      - name: Verify restored API
-        if: failure() && steps.production_restore.outcome == 'success' && steps.restore_auth.outcome == 'success'
-        env:
-          TAXI_URL: ${{ steps.production_snapshot.outputs.url }}
-          TAXI_TOKEN: ${{ steps.restore_auth.outputs.id_token }}
-        run: |
-          python - <<'PY'
-          import json
-          import math
-          import os
-          from pathlib import Path
-          from urllib.request import Request, urlopen
-
-          def call(path, payload=None):
-              data = None if payload is None else json.dumps(payload).encode()
-              request = Request(
-                  os.environ["TAXI_URL"] + path,
-                  data=data,
-                  headers={
-                      "Authorization": "Bearer " + os.environ["TAXI_TOKEN"],
-                      "Content-Type": "application/json",
-                  },
-              )
-              with urlopen(request, timeout=60) as response:
-                  assert response.status == 200
-                  return json.loads(response.read())
-
-          ready = call("/ready")
-          payload = {
-              "Trip_Distance_km": 10.0, "Passenger_Count": 2,
-              "Base_Fare": 3.0, "Per_Km_Rate": 1.5,
-              "Per_Minute_Rate": 0.3, "Time_of_Day": "Morning",
-              "Day_of_Week": "Weekday", "Traffic_Conditions": "Low",
-              "Weather": "Clear",
-          }
-          prediction = call("/predict", payload)
-          fare = prediction["estimated_fare"]
-          assert isinstance(fare, (int, float)) and not isinstance(fare, bool)
-          assert math.isfinite(fare) and fare >= 0
-          assert prediction["model_version"] == ready["model_version"]
-          Path("reports/rollback/production-api-restored.json").write_text(
-              json.dumps({
-                  "api_checks_passed": True,
-                  "ready": ready,
-                  "prediction": prediction,
-              }, indent=2)
-          )
-          print("Restored API readiness and prediction checks passed")
-          PY
-
-      - name: Save deployment evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-${{ github.sha }}
-          path: |
-            reports/deployment.json
-            reports/staging-deployment.json
-            reports/rollback/production-*.json
+          '
+    name: production
