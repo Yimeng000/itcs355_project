@@ -1,0 +1,24 @@
+{
+  "training_run_id": "89172a45019a4d79b0416da9259ff5df",
+  "training_git_commit": "ee8ce66a019d1916cd32a5eed251ffafc9e716a4",
+  "model_sha256": "444becdc54268009a0fb4abcda0c4fa6a0a07ab7f9674cdd518ddc3cfc7d48a7",
+  "seed": 42,
+  "data_fingerprint": "f652ecb504509f7c",
+  "baseline_type": "dummy_mean",
+  "model_type": "random_forest",
+  "metrics": {
+    "baseline_val_mae": 22.652,
+    "baseline_val_rmse": 37.1191,
+    "baseline_val_r2": -0.0056,
+    "val_mae": 11.402,
+    "val_rmse": 15.9389,
+    "val_r2": 0.8146,
+    "test_mae": 11.4973,
+    "test_rmse": 18.2893,
+    "test_r2": 0.8854
+  },
+  "artifacts": {
+    "model_path": "/home/yimeng/itcs355_project/models/candidate/model.joblib",
+    "schema_path": "/home/yimeng/itcs355_project/models/candidate/input_schema.json"
+  }
+}

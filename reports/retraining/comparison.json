@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-10-12T14:17:59.232273+00:00",
+  "purpose": "Validation comparison; does not register or deploy a model",
+  "registered_version": "2",
+  "candidate_training_run_id": "89172a45019a4d79b0416da9259ff5df",
+  "candidate_training_git_commit": "ee8ce66a019d1916cd32a5eed251ffafc9e716a4",
+  "reference_sha256": "444becdc54268009a0fb4abcda0c4fa6a0a07ab7f9674cdd518ddc3cfc7d48a7",
+  "candidate_sha256": "444becdc54268009a0fb4abcda0c4fa6a0a07ab7f9674cdd518ddc3cfc7d48a7",
+  "validation_sha256": "631fc83bd703a982c4714c9931bc7a85024505487e3dbd6371871ed50b1725b5",
+  "validation_rows": 143,
+  "reference_metrics": {
+    "mae": 11.40204164747887,
+    "rmse": 15.938895233459748,
+    "r2": 0.8145768257305281
+  },
+  "candidate_metrics": {
+    "mae": 11.402041647478871,
+    "rmse": 15.938895233459752,
+    "r2": 0.8145768257305281
+  },
+  "identical_model_files": true,
+  "predictions_match_within_tolerance": true,
+  "max_prediction_difference": 5.684341886080802e-14,
+  "checks": {
+    "candidate_mae_not_worse": true,
+    "candidate_rmse_not_worse": true,
+    "candidate_r2_not_worse": true,
+    "candidate_fares_nonnegative": true
+  },
+  "comparison_passed": true
+}
