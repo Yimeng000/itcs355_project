@@ -118,6 +118,7 @@ jobs:
             dvc.lock
 
   staging:
+    environment: staging
     needs:
     - test
     - reproduce
@@ -206,6 +207,7 @@ jobs:
       image: ${{ steps.image.outputs.uri }}
       url: ${{ steps.staging_deploy.outputs.url }}
   production:
+    environment: production
     needs:
     - staging
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
