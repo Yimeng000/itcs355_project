@@ -63,21 +63,31 @@ jobs:
 
       - name: Retrieve tracked raw data and reference model
         run: |
-          python -m dvc pull data/taxi_trip_pricing.csv.dvc models/model.joblib
+          python -m dvc pull data/taxi_trip_pricing.csv.dvc
           mkdir -p reports/ci
-          cp models/model.joblib reports/ci/reference.joblib
           python - <<'PY'
           import hashlib
           import json
           from pathlib import Path
 
           receipt = json.loads(Path("reports/registration.json").read_text())
+          from urllib.parse import urlsplit
+          from google.cloud import storage
+
+          uri = receipt["artifact_uri"].rstrip("/") + "/model.joblib"
+          location = urlsplit(uri)
+          if location.scheme != "gs" or not location.netloc:
+              raise ValueError("Invalid registered artifact URI")
+          client = storage.Client()
+          client.bucket(location.netloc).blob(
+              location.path.lstrip("/")
+          ).download_to_filename("reports/ci/reference.joblib")
           actual = hashlib.sha256(
               Path("reports/ci/reference.joblib").read_bytes()
           ).hexdigest()
           if actual != receipt["lineage"]["model_sha256"]:
               raise RuntimeError("DVC reference does not match the registered model")
-          print("Registered reference model verified")
+          print("Registered reference model downloaded and verified")
           PY
 
       - name: Reproduce data checks, training and evaluation
