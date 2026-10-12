@@ -46,6 +46,18 @@ def main():
         stdout=subprocess.PIPE,
         text=True,
     )
+    # After rollback, traffic may be pinned to an older revision.
+    subprocess.run(
+        [
+            "gcloud", "run", "services", "update-traffic", args.service,
+            "--project", cfg.project_id,
+            "--region", cfg.region,
+            "--to-latest",
+            "--quiet",
+        ],
+        check=True,
+    )
+
     service = json.loads(result.stdout)
     url = service["status"]["url"]
     print("Service URL:", url)

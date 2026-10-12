@@ -1,0 +1,2 @@
+{"status":"ready","model_version":"2"}
+HTTP status: 200

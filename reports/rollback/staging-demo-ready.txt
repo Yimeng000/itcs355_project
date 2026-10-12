@@ -1,0 +1,2 @@
+{"status":"ready","model_version":"rollback-demo"}
+HTTP status: 200

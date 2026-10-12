@@ -243,6 +243,20 @@ jobs:
       - name: Preserve staging deployment evidence
         run: cp reports/deployment.json reports/staging-deployment.json
 
+      - name: Save production traffic before updating
+        id: production_snapshot
+        run: |
+          python -m cloudlayer.rollback snapshot --service=taxi-fare-api --project="$PROJECT_ID" --region="$REGION" --snapshot=reports/rollback/production-before.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          snapshot = json.loads(Path("reports/rollback/production-before.json").read_text())
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("url=" + snapshot["service_url"] + "\n")
+          PY
+
       - name: Deploy registered model service
         id: deploy
         env:
@@ -312,10 +326,80 @@ jobs:
           print("Cloud readiness, prediction and invalid-input checks passed")
           PY
 
+      - name: Restore production traffic after failed deployment or checks
+        id: production_restore
+        if: failure() && steps.production_snapshot.outcome == 'success' && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure')
+        run: |
+          python -m cloudlayer.rollback restore --service=taxi-fare-api --project="$PROJECT_ID" --region="$REGION" --snapshot=reports/rollback/production-before.json --report=reports/rollback/production-restored.json
+
+      - name: Get token to verify restored service
+        id: restore_auth
+        if: failure() && steps.production_restore.outcome == 'success'
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.production_snapshot.outputs.url }}
+          id_token_include_email: true
+
+      - name: Verify restored API
+        if: failure() && steps.production_restore.outcome == 'success' && steps.restore_auth.outcome == 'success'
+        env:
+          TAXI_URL: ${{ steps.production_snapshot.outputs.url }}
+          TAXI_TOKEN: ${{ steps.restore_auth.outputs.id_token }}
+        run: |
+          python - <<'PY'
+          import json
+          import math
+          import os
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          def call(path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              request = Request(
+                  os.environ["TAXI_URL"] + path,
+                  data=data,
+                  headers={
+                      "Authorization": "Bearer " + os.environ["TAXI_TOKEN"],
+                      "Content-Type": "application/json",
+                  },
+              )
+              with urlopen(request, timeout=60) as response:
+                  assert response.status == 200
+                  return json.loads(response.read())
+
+          ready = call("/ready")
+          payload = {
+              "Trip_Distance_km": 10.0, "Passenger_Count": 2,
+              "Base_Fare": 3.0, "Per_Km_Rate": 1.5,
+              "Per_Minute_Rate": 0.3, "Time_of_Day": "Morning",
+              "Day_of_Week": "Weekday", "Traffic_Conditions": "Low",
+              "Weather": "Clear",
+          }
+          prediction = call("/predict", payload)
+          fare = prediction["estimated_fare"]
+          assert isinstance(fare, (int, float)) and not isinstance(fare, bool)
+          assert math.isfinite(fare) and fare >= 0
+          assert prediction["model_version"] == ready["model_version"]
+          Path("reports/rollback/production-api-restored.json").write_text(
+              json.dumps({
+                  "api_checks_passed": True,
+                  "ready": ready,
+                  "prediction": prediction,
+              }, indent=2)
+          )
+          print("Restored API readiness and prediction checks passed")
+          PY
+
       - name: Save deployment evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: deployment-${{ github.sha }}
           path: |
             reports/deployment.json
             reports/staging-deployment.json
+            reports/rollback/production-*.json
