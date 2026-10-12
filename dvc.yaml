@@ -44,6 +44,9 @@ stages:
   evaluate:
     cmd: python -m src.evaluate
     deps:
+      - params.yaml
+      - src/config.py
+      - src/seeds.py
       - data/processed/test.csv
       - data/processed/train.csv
       - models/model.joblib

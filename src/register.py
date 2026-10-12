@@ -44,6 +44,35 @@ def main():
     if training.get("model_sha256") != model_hash:
         raise RuntimeError("Model changed after training; registration stopped")
 
+    # Reject reports produced for different files.
+    import yaml
+    params = yaml.safe_load(files["params.yaml"].read_text()) or {}
+    paths = params.get("paths", {})
+
+    train_path = root / paths.get("train_csv", "data/processed/train.csv")
+    test_path = root / paths.get("test_csv", "data/processed/test.csv")
+
+    fingerprints = evaluation.get("artifact_fingerprints", {})
+    current_files = {
+        "model_sha256": files["model.joblib"],
+        "train_sha256": train_path,
+        "test_sha256": test_path,
+        "params_sha256": files["params.yaml"],
+    }
+    for name, path in current_files.items():
+        if not path.is_file():
+            raise RuntimeError(f"Missing evaluation input: {path}")
+        current_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        if fingerprints.get(name) != current_hash:
+            raise RuntimeError(
+                f"Evaluation report is missing or outdated: {name}; "
+                "run evaluation again before registration"
+            )
+
+    train_hash = fingerprints["train_sha256"]
+    if training.get("data_fingerprint") != train_hash[:16]:
+        raise RuntimeError("Training data changed; registration stopped")
+
     for key in ("training_run_id", "training_git_commit", "data_fingerprint"):
         if not training.get(key) or training[key] == "unknown":
             raise RuntimeError(f"Missing training record: {key}")

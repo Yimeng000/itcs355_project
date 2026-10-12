@@ -126,15 +126,30 @@ stages:
       hash: md5
       md5: a138b7c6eb4850b7facd87674c3e190e
       size: 2786387
+    - path: params.yaml
+      hash: md5
+      md5: e56929f5705de79a01b48bb5ffaf01f2
+      size: 917
+      isexec: true
+    - path: src/config.py
+      hash: md5
+      md5: 7705b35ae9beca0e4cfbf254729762d2
+      size: 2737
+      isexec: true
     - path: src/evaluate.py
       hash: md5
-      md5: 38cc713df9fdcf188307591f0eca591f
-      size: 9768
+      md5: 1c93b61baab0903111c2f1901076ea4f
+      size: 10153
       isexec: true
     - path: src/features.py
       hash: md5
       md5: b9539468e64e11623ed246787cc229d0
       size: 2583
+      isexec: true
+    - path: src/seeds.py
+      hash: md5
+      md5: 333fb954e6594408f1a7b5925708a0f9
+      size: 424
       isexec: true
     - path: src/train.py
       hash: md5
@@ -157,8 +172,8 @@ stages:
     outs:
     - path: reports/metrics.json
       hash: md5
-      md5: a301557f39f84b12c448f54ec1158d66
-      size: 1009
+      md5: ec895cc371a3bc46f8fc24696ddaf0c7
+      size: 1396
     - path: reports/predicted_vs_actual.png
       hash: md5
       md5: c730f2937df6346d02d7fa8b4f262470

@@ -9,6 +9,7 @@ saves the predicted-vs-actual diagnostic plot, and enforces a strict quality gat
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -203,6 +204,12 @@ def main() -> None:
     # 6. Save audit report
     report_payload = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "artifact_fingerprints": {
+            "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
+            "train_sha256": hashlib.sha256(train_path.read_bytes()).hexdigest(),
+            "test_sha256": hashlib.sha256(test_path.read_bytes()).hexdigest(),
+            "params_sha256": hashlib.sha256(args.params.read_bytes()).hexdigest(),
+        },
         "model_path": str(model_path),
         "test_dataset": str(test_path),
         "test_rows": len(test_df),
