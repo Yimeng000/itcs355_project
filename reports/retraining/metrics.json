@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-10-12T14:21:09Z",
+  "artifact_fingerprints": {
+    "model_sha256": "444becdc54268009a0fb4abcda0c4fa6a0a07ab7f9674cdd518ddc3cfc7d48a7",
+    "train_sha256": "f652ecb504509f7c2f3effdd26cb25f3bee0ad3d108bc8740a43d3e22a69cfb4",
+    "test_sha256": "3f1b6046f3df4481dc74d161da8585ab23b6f21e18fec521f464bdf9d20220a7",
+    "params_sha256": "31e5eefc8aabf1ea37076b5d6245a21a458881a23b7a0424892c7f10fc4a970d"
+  },
+  "model_path": "/home/yimeng/itcs355_project/models/candidate/model.joblib",
+  "test_dataset": "/home/yimeng/itcs355_project/data/processed/test.csv",
+  "test_rows": 143,
+  "candidate_metrics": {
+    "mae": 11.4973,
+    "rmse": 18.2893,
+    "r2": 0.8854
+  },
+  "baseline_metrics": {
+    "mae": 29.2247,
+    "rmse": 54.6592,
+    "r2": -0.0234
+  },
+  "latency_benchmark": {
+    "n_samples": 100,
+    "mean_ms": 79.82,
+    "p50_ms": 72.09,
+    "p95_ms": 121.43,
+    "p99_ms": 202.36,
+    "max_ms": 212.71,
+    "under_one_second": true
+  },
+  "quality_gate": {
+    "passed": true,
+    "checks": {
+      "candidate_beats_baseline_mae": true,
+      "candidate_beats_baseline_r2": true,
+      "r2_meets_threshold (>= 0.75)": true,
+      "mae_meets_threshold (<= 14.0)": true,
+      "rmse_meets_threshold (<= 22.0)": true,
+      "latency_p95_meets_sla (<= 1000.0ms)": true
+    }
+  },
+  "artifacts": {
+    "plot_path": "/home/yimeng/itcs355_project/reports/retraining/predicted_vs_actual.png"
+  }
+}

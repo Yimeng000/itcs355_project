@@ -1,0 +1,14 @@
+{
+  "training_run_id": "89172a45019a4d79b0416da9259ff5df",
+  "training_git_commit": "ee8ce66a019d1916cd32a5eed251ffafc9e716a4",
+  "data_fingerprint": "f652ecb504509f7c",
+  "model_sha256": "444becdc54268009a0fb4abcda0c4fa6a0a07ab7f9674cdd518ddc3cfc7d48a7",
+  "model_type": "random_forest",
+  "seed": 42,
+  "test_metrics": {
+    "mae": 11.4973,
+    "rmse": 18.2893,
+    "r2": 0.8854
+  },
+  "quality_gate_passed": true
+}

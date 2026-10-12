@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import hashlib
 import json
 
@@ -13,15 +14,26 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--image")
     parser.add_argument("--parent-model")
+    parser.add_argument("--params", type=Path, default=config.REPO_ROOT / "params.yaml")
+    parser.add_argument("--comparison-report", type=Path)
+    parser.add_argument("--reference-model", type=Path, default=config.REPO_ROOT / "models/model.joblib")
+    parser.add_argument("--reference-receipt", type=Path, default=config.REPO_ROOT / "reports/registration.json")
     args = parser.parse_args()
 
     root = config.REPO_ROOT
+    import yaml
+
+    params = yaml.safe_load(args.params.read_text()) or {}
+    paths = params.get("paths", {})
+    model_dir = root / paths.get("model_dir", "models")
+    reports_dir = root / params.get("evaluate", {}).get("reports_dir", "reports")
+
     files = {
-        "model.joblib": root / "models/model.joblib",
-        "input_schema.json": root / "models/input_schema.json",
-        "train_metrics.json": root / "reports/train_metrics.json",
-        "metrics.json": root / "reports/metrics.json",
-        "params.yaml": root / "params.yaml",
+        "model.joblib": model_dir / "model.joblib",
+        "input_schema.json": model_dir / "input_schema.json",
+        "train_metrics.json": reports_dir / "train_metrics.json",
+        "metrics.json": reports_dir / params.get("evaluate", {}).get("metrics_file", "metrics.json"),
+        "params.yaml": args.params,
         "dvc.lock": root / "dvc.lock",
     }
     for path in files.values():
@@ -84,6 +96,46 @@ def main():
         ):
             raise RuntimeError("Training and evaluation reports do not match")
 
+    if not args.dry_run and args.comparison_report is None:
+        raise RuntimeError("A model comparison report is required for registration")
+
+    if args.comparison_report is not None:
+        comparison = json.loads(args.comparison_report.read_text())
+        required_checks = {
+            "candidate_mae_not_worse",
+            "candidate_rmse_not_worse",
+            "candidate_r2_not_worse",
+            "candidate_fares_nonnegative",
+        }
+        comparison_checks = comparison.get("checks", {})
+        if (
+            comparison.get("comparison_passed") is not True
+            or not required_checks.issubset(comparison_checks)
+            or any(value is not True for value in comparison_checks.values())
+        ):
+            raise RuntimeError("Model comparison failed; registration stopped")
+
+        validation_path = root / paths.get("val_csv", "data/processed/val.csv")
+        reference_receipt = json.loads(args.reference_receipt.read_text())
+        reference_hash = hashlib.sha256(args.reference_model.read_bytes()).hexdigest()
+        validation_hash = hashlib.sha256(validation_path.read_bytes()).hexdigest()
+
+        expected = {
+            "candidate_sha256": model_hash,
+            "reference_sha256": reference_hash,
+            "validation_sha256": validation_hash,
+            "candidate_training_run_id": training["training_run_id"],
+            "candidate_training_git_commit": training["training_git_commit"],
+            "registered_version": str(reference_receipt["version_id"]),
+        }
+        if reference_receipt["lineage"]["model_sha256"] != reference_hash:
+            raise RuntimeError("Reference does not match its registration receipt")
+        for key, value in expected.items():
+            if comparison.get(key) != value:
+                raise RuntimeError(f"Comparison report is outdated or mismatched: {key}")
+
+        files["comparison.json"] = args.comparison_report
+
     manifest = {
         "training_run_id": training["training_run_id"],
         "training_git_commit": training["training_git_commit"],
@@ -94,7 +146,7 @@ def main():
         "test_metrics": evaluation["candidate_metrics"],
         "quality_gate_passed": True,
     }
-    manifest_path = root / "reports/model_lineage.json"
+    manifest_path = reports_dir / "model_lineage.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     files["model_lineage.json"] = manifest_path
 

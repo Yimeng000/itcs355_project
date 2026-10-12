@@ -40,5 +40,12 @@ The validation data has already been used to evaluate the reference model.
 This experiment does not establish real-world performance.
 Test-set results must not be used repeatedly to choose model settings.
 
-The comparison currently runs separately and is not yet connected to
-the model registration or deployment workflow.
+Real model registration now requires a passing comparison report.
+Registration checks the candidate, reference model, validation data,
+training run and reference version against that report.
+
+Candidate evaluation and registration preview were verified locally.
+All 71 automated tests passed.
+
+CI runs the automated tests, but does not yet automatically run the
+complete retraining workflow. Production still uses registered model v2.
