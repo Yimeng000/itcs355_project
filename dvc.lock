@@ -8,6 +8,10 @@ stages:
       md5: ea9922043a10c6cffbda9e5ee5fe62f9
       size: 67269
       isexec: true
+    - path: reports/data_quality.json
+      hash: md5
+      md5: f71813a9fa989c0f296cfbec73d2a968
+      size: 2142
     - path: src/clean.py
       hash: md5
       md5: c335c201e67be6e65958a08b308c047f
@@ -178,3 +182,26 @@ stages:
       hash: md5
       md5: c730f2937df6346d02d7fa8b4f262470
       size: 89071
+  data_quality:
+    cmd: python -m src.data_quality --input data/taxi_trip_pricing.csv --report 
+      reports/data_quality.json
+    deps:
+    - path: data/taxi_trip_pricing.csv
+      hash: md5
+      md5: ea9922043a10c6cffbda9e5ee5fe62f9
+      size: 67269
+      isexec: true
+    - path: src/clean.py
+      hash: md5
+      md5: c335c201e67be6e65958a08b308c047f
+      size: 7161
+      isexec: true
+    - path: src/data_quality.py
+      hash: md5
+      md5: 806af31e13b04313160aa2acf225b75b
+      size: 4102
+    outs:
+    - path: reports/data_quality.json
+      hash: md5
+      md5: f71813a9fa989c0f296cfbec73d2a968
+      size: 2142

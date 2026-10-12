@@ -1,0 +1,81 @@
+{
+  "rows": 1000,
+  "missing_columns": [],
+  "thresholds": {
+    "minimum_rows": 100,
+    "maximum_missing_fraction": 0.2,
+    "training_passenger_range": [
+      1,
+      6
+    ]
+  },
+  "columns": {
+    "Trip_Distance_km": {
+      "missing_fraction": 0.05,
+      "invalid_values": 0
+    },
+    "Passenger_Count": {
+      "missing_fraction": 0.05,
+      "invalid_values": 0
+    },
+    "Base_Fare": {
+      "missing_fraction": 0.05,
+      "invalid_values": 0
+    },
+    "Per_Km_Rate": {
+      "missing_fraction": 0.05,
+      "invalid_values": 0
+    },
+    "Per_Minute_Rate": {
+      "missing_fraction": 0.05,
+      "invalid_values": 0
+    },
+    "Trip_Price": {
+      "missing_fraction": 0.049,
+      "invalid_values": 0
+    },
+    "Time_of_Day": {
+      "missing_fraction": 0.05,
+      "unknown_values": []
+    },
+    "Day_of_Week": {
+      "missing_fraction": 0.05,
+      "unknown_values": []
+    },
+    "Traffic_Conditions": {
+      "missing_fraction": 0.05,
+      "unknown_values": []
+    },
+    "Weather": {
+      "missing_fraction": 0.05,
+      "unknown_values": []
+    }
+  },
+  "checks": {
+    "minimum_rows": true,
+    "required_columns_present": true,
+    "unique_column_names": true,
+    "Trip_Distance_km:missing_fraction": true,
+    "Trip_Distance_km:valid_values": true,
+    "Passenger_Count:missing_fraction": true,
+    "Passenger_Count:valid_values": true,
+    "Base_Fare:missing_fraction": true,
+    "Base_Fare:valid_values": true,
+    "Per_Km_Rate:missing_fraction": true,
+    "Per_Km_Rate:valid_values": true,
+    "Per_Minute_Rate:missing_fraction": true,
+    "Per_Minute_Rate:valid_values": true,
+    "Trip_Price:missing_fraction": true,
+    "Trip_Price:valid_values": true,
+    "Time_of_Day:missing_fraction": true,
+    "Time_of_Day:known_categories": true,
+    "Day_of_Week:missing_fraction": true,
+    "Day_of_Week:known_categories": true,
+    "Traffic_Conditions:missing_fraction": true,
+    "Traffic_Conditions:known_categories": true,
+    "Weather:missing_fraction": true,
+    "Weather:known_categories": true
+  },
+  "passed": true,
+  "raw_sha256": "f285b49395bbf69bc69c9692f512f4e473c7463cf5f0632c8f3b791bccb71993"
+}

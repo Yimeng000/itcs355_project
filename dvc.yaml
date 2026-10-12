@@ -1,7 +1,18 @@
 stages:
+  data_quality:
+    cmd: python -m src.data_quality --input data/taxi_trip_pricing.csv --report reports/data_quality.json
+    deps:
+      - data/taxi_trip_pricing.csv
+      - src/data_quality.py
+      - src/clean.py
+    metrics:
+      - reports/data_quality.json:
+          cache: false
+
   clean:
     cmd: python src/clean.py
     deps:
+      - reports/data_quality.json
       - data/taxi_trip_pricing.csv
       - src/clean.py
     outs:
