@@ -45,7 +45,12 @@ Registration checks the candidate, reference model, validation data,
 training run and reference version against that report.
 
 Candidate evaluation and registration preview were verified locally.
-All 71 automated tests passed.
+All 97 automated tests passed in the recorded final check.
 
-CI runs the automated tests, but does not yet automatically run the
-complete retraining workflow. Production still uses registered model v2.
+GitHub Actions now reproduces data checks, training and evaluation,
+compares the retrained candidate with the registered reference,
+and verifies registration checks without uploading a new model.
+
+Deployment proceeds through staging checks before production.
+Production continues to use registered model v2;
+retraining does not automatically register or promote a new model.
