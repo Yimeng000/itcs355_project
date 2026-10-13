@@ -279,3 +279,8 @@ gcloud run services delete taxi-fare-api \
 ```
 
 Review remaining project images, model versions, monitoring resources, storage and permissions separately. Shared lab buckets, registry repositories and identities must not be deleted wholesale as project-only cleanup. Document retained resources and any ongoing costs. Preserve a reproducible dataset/model access route before deleting stored artifacts.
+
+The capstone Cloud Run services were deleted on 13 October 2026.
+Both deployment workflows are disabled. Historical API URLs are no longer
+available; use local inference and saved evidence.
+See the [cleanup record](docs/cleanup.md) for verification and retained resources.
