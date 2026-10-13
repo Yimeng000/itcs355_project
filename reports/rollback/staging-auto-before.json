@@ -1,0 +1,10 @@
+{
+  "service": "taxi-fare-staging",
+  "project": "itcs355-6688176",
+  "region": "asia-southeast1",
+  "timestamp": "2026-10-13T13:00:28.371033+00:00",
+  "traffic": {
+    "taxi-fare-staging-00008-zlp": 100
+  },
+  "service_url": "https://taxi-fare-staging-dth7dtk3bq-as.a.run.app"
+}

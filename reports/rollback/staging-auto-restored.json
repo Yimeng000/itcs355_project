@@ -1,0 +1,15 @@
+{
+  "service": "taxi-fare-staging",
+  "project": "itcs355-6688176",
+  "region": "asia-southeast1",
+  "timestamp": "2026-10-13T13:01:18.516206+00:00",
+  "expected_traffic": {
+    "taxi-fare-staging-00008-zlp": 100
+  },
+  "observed_traffic": {
+    "taxi-fare-staging-00008-zlp": 100
+  },
+  "traffic_restored": true,
+  "restore_and_verification_seconds": 9.63,
+  "scope": "Traffic restoration only; API health must be checked separately."
+}
